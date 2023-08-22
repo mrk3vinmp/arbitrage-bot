@@ -7,6 +7,10 @@ interface IERC20 {
     // Add other ERC20 functions as needed.
 }
 
+interface ISwapRouter {
+    // Define the required functions from the ISwapRouter interface here.
+}
+
 
 contract Arbitrage {
     struct Swap {
