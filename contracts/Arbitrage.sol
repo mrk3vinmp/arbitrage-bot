@@ -1,11 +1,7 @@
-//SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "./uniswap/v3/ISwapRouter.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-contract Arbitrage is Ownable {
+contract Arbitrage {
     struct Swap {
         address tokenIn;
         address tokenOut;
@@ -28,7 +24,7 @@ contract Arbitrage is Ownable {
         address _flashLoanPool,
         uint256 _loanAmount,
         Swap[] memory _swaps
-    ) external onlyOwner {
+    ) external {
         bytes memory data = abi.encode(
             FlashCallbackData({
                 me: msg.sender,
@@ -40,12 +36,17 @@ contract Arbitrage is Ownable {
 
         address loanToken = _swaps[0].tokenIn;
 
-        IDODO(_flashLoanPool).flashLoan(
-            IDODO(_flashLoanPool)._BASE_TOKEN_() == loanToken ? _loanAmount : 0,
-            IDODO(_flashLoanPool)._BASE_TOKEN_() == loanToken ? 0 : _loanAmount,
-            address(this),
-            data
+        (bool success, ) = _flashLoanPool.call(
+            abi.encodeWithSignature(
+                "flashLoan(uint256,uint256,address,bytes)",
+                loanToken == address(this) ? _loanAmount : 0,
+                loanToken != address(this) ? _loanAmount : 0,
+                address(this),
+                data
+            )
         );
+
+        require(success, "Flash loan failed");
     }
 
     function _flashLoanCallBack(
@@ -177,12 +178,19 @@ contract Arbitrage is Ownable {
         path[0] = _tokenIn;
         path[1] = _tokenOut;
         uint256 deadline = block.timestamp;
-        IUniswapV2Router(_router).swapExactTokensForTokens(
-            _amount,
-            1,
-            path,
-            address(this),
-            deadline
+        (uint256[] memory amountsOut) = _router.call(
+            abi.encodeWithSignature(
+                "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
+                _amount,
+                1,
+                path,
+                address(this),
+                deadline
+            )
+        );
+        require(
+            amountsOut[amountsOut.length - 1] > 0,
+            "UniswapV2 swap failed"
         );
     }
 
@@ -221,78 +229,16 @@ contract Arbitrage is Ownable {
         return balance;
     }
 
-    function recoverNative() external onlyOwner {
+    function recoverNative() external {
+        require(msg.sender == owner(), "Only owner can recover native tokens");
         payable(msg.sender).transfer(address(this).balance);
     }
 
-    function recoverTokens(address tokenAddress) external onlyOwner {
+    function recoverTokens(address tokenAddress) external {
+        require(msg.sender == owner(), "Only owner can recover tokens");
         IERC20 token = IERC20(tokenAddress);
         token.transfer(msg.sender, token.balanceOf(address(this)));
     }
-
-    function DVMFlashLoanCall(
-        address sender,
-        uint256 baseAmount,
-        uint256 quoteAmount,
-        bytes calldata data
-    ) external {
-        _flashLoanCallBack(sender, baseAmount, quoteAmount, data);
-    }
-
-    function DPPFlashLoanCall(
-        address sender,
-        uint256 baseAmount,
-        uint256 quoteAmount,
-        bytes calldata data
-    ) external {
-        _flashLoanCallBack(sender, baseAmount, quoteAmount, data);
-    }
-
-    function DSPFlashLoanCall(
-        address sender,
-        uint256 baseAmount,
-        uint256 quoteAmount,
-        bytes calldata data
-    ) external {
-        _flashLoanCallBack(sender, baseAmount, quoteAmount, data);
-    }
-}
-
-interface IDODO {
-    function flashLoan(
-        uint256 baseAmount,
-        uint256 quoteAmount,
-        address assetTo,
-        bytes memory data
-    ) external;
-
-    function _BASE_TOKEN_() external view returns (address);
-}
-
-interface IUniswapV2Router {
-    function getAmountsOut(uint256 amountIn, address[] memory path)
-        external
-        view
-        returns (uint256[] memory amounts);
-
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-}
-
-interface IUniswapV2Pair {
-    function token0() external view returns (address);
-
-    function token1() external view returns (address);
-
-    function swap(
-        uint256 amount0Out,
-        uint256 amount1Out,
-        address to,
-        bytes calldata data
-    ) external;
+    
+    // Add your DVMFlashLoanCall, DPPFlashLoanCall, and other functions here as needed.
 }
